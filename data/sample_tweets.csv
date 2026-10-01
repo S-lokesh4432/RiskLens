@@ -1,0 +1,9 @@
+timestamp,source,text,company,ground_truth_sentiment,ground_truth_sentiment_score,ground_truth_event
+2026-03-01 09:20:00,twitter,$NVDA breaking out to new all-time highs! Datacenter demand is insane #AI #Stocks,NVDA,positive,0.85,Product Launch
+2026-03-01 10:05:00,twitter,$JPM exposure to commercial real estate loans could trigger credit downgrades if rates stay high,JPM,negative,-0.62,Credit Event
+2026-03-01 11:50:00,twitter,Oil spiking hard today! $XOM and $CVX printing cash flow right now 🛢️📈,XOM,positive,0.78,Macroeconomic
+2026-03-01 13:10:00,twitter,Rumors of massive layoffs and restructuring at $META incoming next week,META,negative,-0.55,Macroeconomic
+2026-03-01 14:30:00,twitter,Huge earnings beat for $MSFT! Azure growth completely blew past analyst consensus.,MSFT,positive,0.9,Earnings
+2026-03-02 09:15:00,twitter,Regulatory scrutiny on Big Tech $GOOGL ad monopoly case wrapping up soon. High fine expected.,GOOGL,negative,-0.71,Regulatory
+2026-03-02 10:45:00,twitter,$AAPL Vision Pro sales surging in European markets ahead of target!,AAPL,positive,0.74,Product Launch
+2026-03-02 12:00:00,twitter,Uncertainty in credit markets! Moody's warning on $BAC leverage metrics.,BAC,negative,-0.68,Credit Event
