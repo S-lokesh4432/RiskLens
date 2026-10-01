@@ -34,7 +34,7 @@ class EntityExtractor:
     def __init__(self):
         self.dict = SP100_DICTIONARY
 
-    def extract_company(text: str, hint: Optional[str] = None) -> str:
+    def extract_company(self, text: str, hint: Optional[str] = None) -> str:
         # Check hint first if valid ticker
         if hint and hint.upper() in self.dict:
             return hint.upper()
