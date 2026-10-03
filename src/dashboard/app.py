@@ -225,16 +225,11 @@ with tab1:
 with tab2:
     st.subheader("Module B: Strategic Portfolio Stress Testing")
     
-    stress_engine = StressTestEngine()
+    engine = StressTestEngine()
     signals = SignalLogger.get_all_signals()
     
-    # Filter signals using trigger evaluation helper
-    def is_sig_triggerable(sig_item):
-        if hasattr(stress_engine.trigger, "is_triggerable"):
-            return stress_engine.trigger.is_triggerable(sig_item)
-        return stress_engine.trigger.evaluate(sig_item)[0]
-
-    triggerable_signals = [s for s in signals if is_sig_triggerable(StructuredRiskSignal(**s))]
+    # Filter dropdown signals to only those where engine.trigger.evaluate(sig)[0] is True
+    triggerable_signals = [s for s in signals if engine.trigger.evaluate(StructuredRiskSignal(**s))[0]]
     
     if triggerable_signals:
         sig_options = [f"[{s['event_type']}] Impact: {s['impact_score']}/10 | Sent: {s['sentiment_score']:+.2f} | {s['company']} | {s['text'][:60]}..." for s in triggerable_signals]
@@ -242,7 +237,7 @@ with tab2:
         selected_sig_idx = sig_options.index(selected_option)
         active_signal = StructuredRiskSignal(**triggerable_signals[selected_sig_idx])
     else:
-        # High impact adverse default fallback signal (Impact 9 > 7)
+        # High impact adverse default fallback signal (Impact 9 > 7, Sentiment -0.91 <= -0.3)
         active_signal = StructuredRiskSignal(
             id="SIG-ADVERSE-01",
             timestamp="2026-03-02 09:00:00",
@@ -257,26 +252,21 @@ with tab2:
         )
         st.info("ℹ️ Displaying default Adverse Credit Event signal for stress testing demo.")
 
-    # Run Stress Engine
-    stress_res = stress_engine.run_stress_test(active_signal)
+    # Run Stress Engine directly
+    result = engine.run_stress_test(active_signal)
 
-    # Trigger Banner
-    if stress_res["triggered"]:
-        st.markdown(f'<div class="trigger-badge">⚡ {stress_res["trigger_message"]}</div>', unsafe_allow_html=True)
-        summary = stress_res["summary"]
-        baseline_m = summary["baseline_total_usd"] / 1e6
-        stressed_m = summary["stressed_total_usd"] / 1e6
-        loss_m = max(0.0, baseline_m - stressed_m)
-        loss_pct = (loss_m / baseline_m) * 100.0 if baseline_m > 0 else 0.0
-
-        mc1, mc2, mc3, mc4 = st.columns(4)
-        mc1.metric("Baseline Portfolio Value", f"${baseline_m:,.2f}M")
-        mc2.metric("Stressed Portfolio Value", f"${stressed_m:,.2f}M")
-        mc3.metric("Total Stress Portfolio Loss", f"${loss_m:,.2f}M", delta=f"-{loss_pct:.2f}%", delta_color="inverse")
-        mc4.metric("Parametric 99% VaR Estimate", f"${summary['var_99_estimate_usd']/1e6:,.2f}M")
-    else:
-        st.warning(f"⚠️ Stress Trigger Not Activated: {stress_res['trigger_message']}")
+    # Trigger Evaluation & Metric Cards
+    if not result["triggered"]:
+        st.warning(result["trigger_message"])
         summary = None
+    else:
+        st.error(result["trigger_message"])
+        summary = result["summary"]
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Baseline", f"${summary['baseline_total_usd']/1e6:,.2f}M")
+        c2.metric("Stressed", f"${summary['stressed_total_usd']/1e6:,.2f}M")
+        c3.metric("Loss", f"${summary['total_loss_usd']/1e6:,.2f}M", delta=f"-{summary['loss_pct']*100:.2f}%", delta_color="inverse")
+        c4.metric("Baseline 99% VaR (10-Day)", f"${summary['var_99_estimate_usd']/1e6:,.2f}M")
 
     if summary is not None:
         st.markdown("---")
@@ -285,7 +275,7 @@ with tab2:
         col_w1, col_w2 = st.columns([6, 4])
         with col_w1:
             st.subheader("Financial Loss Waterfall (Baseline → Asset Class Losses → Stressed)")
-            ac_summary = stress_res.get("by_asset_class", {})
+            ac_summary = result.get("by_asset_class", {})
             
             loan_loss = ac_summary.get("Loan", {}).get("loss_usd", abs(ac_summary.get("Loan", {}).get("pnl_usd", 0.0)))
             bond_loss = ac_summary.get("Bond", {}).get("loss_usd", abs(ac_summary.get("Bond", {}).get("pnl_usd", 0.0)))
@@ -336,7 +326,7 @@ with tab2:
 
         with col_w2:
             st.subheader("Loss Breakdown by Sector")
-            sec_summary = stress_res.get("by_sector", {})
+            sec_summary = result.get("by_sector", {})
             sec_rows = []
             for k, v in sec_summary.items():
                 l_val = v.get("loss_usd", abs(v.get("pnl_usd", 0.0)))
@@ -360,7 +350,7 @@ with tab2:
 
         # Detailed Asset Breakdown Table
         st.subheader("Detailed Asset Revaluation Ledger ($)")
-        df_assets = pd.DataFrame(stress_res.get("detailed_assets", []))
+        df_assets = pd.DataFrame(result.get("detailed_assets", []))
         if not df_assets.empty:
             if "loss_usd" not in df_assets.columns and "baseline_value_usd" in df_assets.columns:
                 df_assets["loss_usd"] = df_assets["baseline_value_usd"] - df_assets["stressed_value_usd"]
