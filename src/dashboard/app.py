@@ -349,8 +349,12 @@ with tab2:
     # Detailed Asset Breakdown Table
     st.subheader("Detailed Asset Revaluation Ledger ($)")
     df_assets = pd.DataFrame(stress_res["detailed_assets"])
+    if "loss_usd" not in df_assets.columns and "baseline_value_usd" in df_assets.columns:
+        df_assets["loss_usd"] = df_assets["baseline_value_usd"] - df_assets["stressed_value_usd"]
+    
+    display_cols = [c for c in ["asset_id", "asset_name", "asset_class", "sector", "ticker", "baseline_value_usd", "stressed_value_usd", "loss_usd", "pnl_pct"] if c in df_assets.columns]
     st.dataframe(
-        df_assets[["asset_id", "asset_name", "asset_class", "sector", "ticker", "baseline_value_usd", "stressed_value_usd", "loss_usd", "pnl_pct"]],
+        df_assets[display_cols],
         use_container_width=True,
         height=300
     )
