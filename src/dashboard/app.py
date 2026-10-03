@@ -460,10 +460,13 @@ with tab4:
         st.plotly_chart(fig_comp, use_container_width=True)
 
     with col_e2:
-        st.subheader("Event Classifier Confusion Matrix (100 Headlines)")
         if "confusion_matrix" in event_eval:
             cm = event_eval["confusion_matrix"]
-            labels = event_eval.get("labels", EVENT_LABELS)
+            default_event_labels = [
+                "Geopolitical", "Macroeconomic", "Credit Event", "Regulatory",
+                "Earnings", "Product Launch", "Merger/Acquisition", "Other"
+            ]
+            labels = event_eval.get("labels", default_event_labels)
             
             fig_cm = px.imshow(
                 cm,
