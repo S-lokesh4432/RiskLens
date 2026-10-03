@@ -1,14 +1,14 @@
 # Unified AI/NLP Risk Engine & Portfolio Stress Testing - S&P Global & Crisil Campus Hackathon 2026
 
-**Candidate Name:** Shivam  
-**College Email ID:** svssanand@gmail.com  
+**Candidate Name:** S.Lokesh
+**College Email ID:** solleti.sailokesh2023@vitstudent.ac.in  
 **College / Campus:** VIT Chennai  
 **Demo Video Link:** https://youtu.be/unlisted_demo_link  
 **Slide Deck Link (if hosted externally):** [docs/presentation.pdf](docs/presentation.pdf)  
 
 ---
 
-## 1. Project Overview / Problem Statement & Approach
+## 1. Project Overview 
 
 Modern financial institutions and rating agencies face an overwhelming volume of real-time unstructured text—ranging from financial news headlines to social media sentiment. Critical risk events such as credit default contagion, supply chain blockades, or unexpected regulatory inquiries are often buried in noise, creating severe blind spots for traditional credit risk models that rely on lagging quarterly filings.
 
