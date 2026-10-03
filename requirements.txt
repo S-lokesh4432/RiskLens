@@ -1,5 +1,4 @@
 # vit-chennai-sp-hackathon
-unified-risk-engine>=1.0.0
 torch>=2.0.0
 transformers>=4.30.0
 fastapi>=0.95.0
