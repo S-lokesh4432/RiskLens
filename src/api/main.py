@@ -1,12 +1,9 @@
-"""
-FastAPI REST API Service for Unified NLP Risk Engine.
-Endpoints:
-- GET /              : Health check & system status
-- GET /signals       : Query all structured risk signals
-- GET /signals/{ticker} : Query risk signals filtered by company ticker
-- POST /analyze      : Real-time analysis of custom text item
-- POST /replay/start : Trigger batch processing of replay feeds
-"""
+import sys
+import os
+
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field

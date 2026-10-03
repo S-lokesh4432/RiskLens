@@ -1,11 +1,10 @@
-"""
-Single Streamlit Dashboard App for Unified AI/NLP Risk Engine.
-Tabs:
-1. Live Signal Feed
-2. Module B Stress Test
-3. Module A Rebalancer
-4. Model Evaluation
-"""
+import sys
+import os
+
+# Dynamically add project root directory to sys.path for Streamlit
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 import streamlit as st
 import pandas as pd
