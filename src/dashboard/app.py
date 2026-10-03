@@ -273,12 +273,12 @@ with tab2:
     col_w1, col_w2 = st.columns([6, 4])
     with col_w1:
         st.subheader("Financial Loss Waterfall (Baseline → Asset Class Losses → Stressed)")
-        ac_summary = stress_res["by_asset_class"]
+        ac_summary = stress_res.get("by_asset_class", {})
         
-        loan_loss = ac_summary.get("Loan", {}).get("loss_usd", 0.0)
-        bond_loss = ac_summary.get("Bond", {}).get("loss_usd", 0.0)
-        deriv_loss = ac_summary.get("Derivative", {}).get("loss_usd", 0.0)
-        eq_loss = ac_summary.get("Equity", {}).get("loss_usd", 0.0)
+        loan_loss = ac_summary.get("Loan", {}).get("loss_usd", abs(ac_summary.get("Loan", {}).get("pnl_usd", 0.0)))
+        bond_loss = ac_summary.get("Bond", {}).get("loss_usd", abs(ac_summary.get("Bond", {}).get("pnl_usd", 0.0)))
+        deriv_loss = ac_summary.get("Derivative", {}).get("loss_usd", abs(ac_summary.get("Derivative", {}).get("pnl_usd", 0.0)))
+        eq_loss = ac_summary.get("Equity", {}).get("loss_usd", abs(ac_summary.get("Equity", {}).get("pnl_usd", 0.0)))
         
         measures = ["absolute", "relative", "relative", "relative", "relative", "total"]
         x_vals = ["Baseline", "Loan Loss", "Bond Loss", "Deriv Loss", "Equity Loss", "Stressed"]
@@ -324,10 +324,14 @@ with tab2:
 
     with col_w2:
         st.subheader("Loss Breakdown by Sector")
-        sec_summary = stress_res["by_sector"]
-        sec_df = pd.DataFrame([
-            {"sector": k, "loss_usd": v["loss_usd"] / 1e6} for k, v in sec_summary.items() if v["loss_usd"] > 0
-        ])
+        sec_summary = stress_res.get("by_sector", {})
+        sec_rows = []
+        for k, v in sec_summary.items():
+            l_val = v.get("loss_usd", abs(v.get("pnl_usd", 0.0)))
+            if l_val > 0:
+                sec_rows.append({"sector": k, "loss_usd": l_val / 1e6})
+                
+        sec_df = pd.DataFrame(sec_rows)
         if not sec_df.empty:
             fig_pie = px.pie(
                 sec_df,
