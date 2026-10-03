@@ -1,9 +1,9 @@
 """
 Automated Stress Test Trigger Evaluator.
-Triggers stress test ONLY on adverse events:
+Triggers stress test ONLY on adverse high-impact risk events:
 1. event_type in monitored stress-worthy list (Geopolitical, Macroeconomic, Credit Event, Regulatory)
-2. impact_score >= threshold (default 7)
-3. sentiment_score <= -0.3 (strictly negative/adverse sentiment)
+2. impact_score > threshold (strictly greater than 7)
+3. sentiment_score <= -0.3 (strictly adverse/negative sentiment)
 """
 
 from typing import Tuple, List, Optional
@@ -22,19 +22,28 @@ class StressTrigger:
         self.max_sentiment = max_sentiment
 
     def evaluate(self, signal: StructuredRiskSignal) -> Tuple[bool, str]:
+        reasons = []
+        
         # 1. Sentiment check: Must be adverse (sentiment <= -0.3)
         if signal.sentiment_score > self.max_sentiment:
-            return False, f"Non-adverse signal (sentiment {signal.sentiment_score:+.2f} > {self.max_sentiment}). Stress tests only trigger on adverse market news."
+            reasons.append(f"Non-adverse sentiment ({signal.sentiment_score:+.2f} > {self.max_sentiment})")
 
-        # 2. Impact score check
-        if signal.impact_score < self.threshold:
-            return False, f"Impact score ({signal.impact_score}) below threshold ({self.threshold})."
+        # 2. Strict Impact score check (impact_score > threshold)
+        if signal.impact_score <= self.threshold:
+            reasons.append(f"Impact score ({signal.impact_score}) is not strictly > {self.threshold}")
         
         # 3. Event type check
         if signal.event_type not in self.allowed_events:
-            return False, f"Event type '{signal.event_type}' not in stress-worthy adverse event list."
+            reasons.append(f"Event type '{signal.event_type}' not in monitored stress list {self.allowed_events}")
+
+        if reasons:
+            return False, f"Stress trigger criteria not met: {'; '.join(reasons)}."
 
         return True, (
             f"AUTOMATED ADVERSE STRESS TRIGGER ACTIVATED: High Severity Signal Detected! "
             f"[{signal.event_type}] Impact: {signal.impact_score}/10 | Sentiment: {signal.sentiment_score:+.2f} | Ticker: {signal.company}"
         )
+
+    def is_triggerable(self, signal: StructuredRiskSignal) -> bool:
+        """Helper method returning True if signal satisfies all trigger rules."""
+        return self.evaluate(signal)[0]

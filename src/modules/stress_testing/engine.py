@@ -51,6 +51,14 @@ class StressTestEngine:
         # 1. Evaluate adverse trigger criteria
         triggered, trigger_msg = self.trigger.evaluate(signal)
         
+        # Early return if signal does not trigger stress test
+        if not triggered:
+            return {
+                "triggered": False,
+                "trigger_message": trigger_msg,
+                "trigger_signal": signal.model_dump() if hasattr(signal, "model_dump") else signal
+            }
+        
         df = self.pm.load_portfolio()
         baseline_var_99 = compute_baseline_var_99(df, horizon_days=10)
         
@@ -153,16 +161,16 @@ class StressTestEngine:
         }).to_dict(orient="index")
 
         return {
-            "triggered": triggered,
+            "triggered": True,
             "trigger_message": trigger_msg,
-            "trigger_signal": signal.model_dump(),
+            "trigger_signal": signal.model_dump() if hasattr(signal, "model_dump") else signal,
             "scenario_name": shocks["name"],
             "summary": {
                 "baseline_total_usd": baseline_total,
                 "stressed_total_usd": stressed_total,
                 "total_loss_usd": total_loss_usd,
                 "loss_pct": total_loss_pct,
-                "var_99_estimate_usd": baseline_var_99  # Mathematically sound baseline 10-day 99% VaR
+                "var_99_estimate_usd": baseline_var_99
             },
             "by_asset_class": ac_summary,
             "by_sector": sec_summary,

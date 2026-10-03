@@ -225,17 +225,19 @@ with tab1:
 with tab2:
     st.subheader("Module B: Strategic Portfolio Stress Testing")
     
+    stress_engine = StressTestEngine()
     signals = SignalLogger.get_all_signals()
-    # Adverse high-impact signals: sentiment <= -0.3 and impact >= 7
-    adverse_signals = [s for s in signals if s.get("impact_score", 0) >= 7 and s.get("sentiment_score", 0.0) <= -0.3]
     
-    if adverse_signals:
-        sig_options = [f"[{s['event_type']}] Impact: {s['impact_score']}/10 | Sent: {s['sentiment_score']:+.2f} | {s['company']} | {s['text'][:60]}..." for s in adverse_signals]
+    # Filter signals using trigger.is_triggerable helper
+    triggerable_signals = [s for s in signals if stress_engine.trigger.is_triggerable(StructuredRiskSignal(**s))]
+    
+    if triggerable_signals:
+        sig_options = [f"[{s['event_type']}] Impact: {s['impact_score']}/10 | Sent: {s['sentiment_score']:+.2f} | {s['company']} | {s['text'][:60]}..." for s in triggerable_signals]
         selected_option = st.selectbox("Select Triggering Adverse Risk Signal for Stress Test Simulation:", sig_options)
         selected_sig_idx = sig_options.index(selected_option)
-        active_signal = StructuredRiskSignal(**adverse_signals[selected_sig_idx])
+        active_signal = StructuredRiskSignal(**triggerable_signals[selected_sig_idx])
     else:
-        # High impact adverse default fallback signal
+        # High impact adverse default fallback signal (Impact 9 > 7)
         active_signal = StructuredRiskSignal(
             id="SIG-ADVERSE-01",
             timestamp="2026-03-02 09:00:00",
@@ -251,113 +253,114 @@ with tab2:
         st.info("ℹ️ Displaying default Adverse Credit Event signal for stress testing demo.")
 
     # Run Stress Engine
-    stress_engine = StressTestEngine()
     stress_res = stress_engine.run_stress_test(active_signal)
 
     # Trigger Banner
     if stress_res["triggered"]:
         st.markdown(f'<div class="trigger-badge">⚡ {stress_res["trigger_message"]}</div>', unsafe_allow_html=True)
+        summary = stress_res["summary"]
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        mc1.metric("Baseline Portfolio Value", f"${summary['baseline_total_usd']/1e6:,.2f}M")
+        mc2.metric("Stressed Portfolio Value", f"${summary['stressed_total_usd']/1e6:,.2f}M")
+        mc3.metric("Total Stress Portfolio Loss", f"${summary['total_loss_usd']/1e6:,.2f}M", delta=f"-{summary['loss_pct']*100:.2f}%", delta_color="inverse")
+        mc4.metric("Parametric 99% VaR Estimate", f"${summary['var_99_estimate_usd']/1e6:,.2f}M")
     else:
         st.warning(f"⚠️ Stress Trigger Not Activated: {stress_res['trigger_message']}")
-    
-    summary = stress_res["summary"]
-    mc1, mc2, mc3, mc4 = st.columns(4)
-    mc1.metric("Baseline Portfolio Value", f"${summary['baseline_total_usd']/1e6:,.2f}M")
-    mc2.metric("Stressed Portfolio Value", f"${summary['stressed_total_usd']/1e6:,.2f}M")
-    mc3.metric("Total Stress Portfolio Loss", f"${summary['total_loss_usd']/1e6:,.2f}M", delta=f"-{summary['loss_pct']*100:.2f}%", delta_color="inverse")
-    mc4.metric("Parametric 99% VaR Estimate", f"${summary['var_99_estimate_usd']/1e6:,.2f}M")
+        summary = None
 
-    st.markdown("---")
+    if summary is not None:
+        st.markdown("---")
 
-    # Waterfall Chart
-    col_w1, col_w2 = st.columns([6, 4])
-    with col_w1:
-        st.subheader("Financial Loss Waterfall (Baseline → Asset Class Losses → Stressed)")
-        ac_summary = stress_res.get("by_asset_class", {})
-        
-        loan_loss = ac_summary.get("Loan", {}).get("loss_usd", abs(ac_summary.get("Loan", {}).get("pnl_usd", 0.0)))
-        bond_loss = ac_summary.get("Bond", {}).get("loss_usd", abs(ac_summary.get("Bond", {}).get("pnl_usd", 0.0)))
-        deriv_loss = ac_summary.get("Derivative", {}).get("loss_usd", abs(ac_summary.get("Derivative", {}).get("pnl_usd", 0.0)))
-        eq_loss = ac_summary.get("Equity", {}).get("loss_usd", abs(ac_summary.get("Equity", {}).get("pnl_usd", 0.0)))
-        
-        measures = ["absolute", "relative", "relative", "relative", "relative", "total"]
-        x_vals = ["Baseline", "Loan Loss", "Bond Loss", "Deriv Loss", "Equity Loss", "Stressed"]
-        y_vals = [
-            summary['baseline_total_usd'] / 1e6,
-            -loan_loss / 1e6,
-            -bond_loss / 1e6,
-            -deriv_loss / 1e6,
-            -eq_loss / 1e6,
-            summary['stressed_total_usd'] / 1e6
-        ]
+        # Waterfall Chart
+        col_w1, col_w2 = st.columns([6, 4])
+        with col_w1:
+            st.subheader("Financial Loss Waterfall (Baseline → Asset Class Losses → Stressed)")
+            ac_summary = stress_res.get("by_asset_class", {})
+            
+            loan_loss = ac_summary.get("Loan", {}).get("loss_usd", abs(ac_summary.get("Loan", {}).get("pnl_usd", 0.0)))
+            bond_loss = ac_summary.get("Bond", {}).get("loss_usd", abs(ac_summary.get("Bond", {}).get("pnl_usd", 0.0)))
+            deriv_loss = ac_summary.get("Derivative", {}).get("loss_usd", abs(ac_summary.get("Derivative", {}).get("pnl_usd", 0.0)))
+            eq_loss = ac_summary.get("Equity", {}).get("loss_usd", abs(ac_summary.get("Equity", {}).get("pnl_usd", 0.0)))
+            
+            measures = ["absolute", "relative", "relative", "relative", "relative", "total"]
+            x_vals = ["Baseline", "Loan Loss", "Bond Loss", "Deriv Loss", "Equity Loss", "Stressed"]
+            y_vals = [
+                summary['baseline_total_usd'] / 1e6,
+                -loan_loss / 1e6,
+                -bond_loss / 1e6,
+                -deriv_loss / 1e6,
+                -eq_loss / 1e6,
+                summary['stressed_total_usd'] / 1e6
+            ]
 
-        text_vals = [
-            f"${summary['baseline_total_usd']/1e6:.1f}M",
-            f"-${loan_loss/1e6:.1f}M",
-            f"-${bond_loss/1e6:.1f}M",
-            f"-${deriv_loss/1e6:.1f}M",
-            f"-${eq_loss/1e6:.1f}M",
-            f"${summary['stressed_total_usd']/1e6:.1f}M"
-        ]
+            text_vals = [
+                f"${summary['baseline_total_usd']/1e6:.1f}M",
+                f"-${loan_loss/1e6:.1f}M",
+                f"-${bond_loss/1e6:.1f}M",
+                f"-${deriv_loss/1e6:.1f}M",
+                f"-${eq_loss/1e6:.1f}M",
+                f"${summary['stressed_total_usd']/1e6:.1f}M"
+            ]
 
-        fig_wf = go.Figure(go.Waterfall(
-            name = "Portfolio Valuation ($M)",
-            orientation = "v",
-            measure = measures,
-            x = x_vals,
-            textposition = "outside",
-            text = text_vals,
-            y = y_vals,
-            connector = {"line":{"color":"rgb(180, 180, 180)"}},
-            decreasing = {"marker":{"color":"#ef233c"}},
-            increasing = {"marker":{"color":"#2a9d8f"}},
-            totals = {"marker":{"color":"#0077b6"}}
-        ))
-        fig_wf.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font_color="white",
-            height=380,
-            yaxis=dict(title="Portfolio Value ($ Millions)", showgrid=True, gridcolor="rgba(255,255,255,0.1)")
-        )
-        st.plotly_chart(fig_wf, use_container_width=True)
-
-    with col_w2:
-        st.subheader("Loss Breakdown by Sector")
-        sec_summary = stress_res.get("by_sector", {})
-        sec_rows = []
-        for k, v in sec_summary.items():
-            l_val = v.get("loss_usd", abs(v.get("pnl_usd", 0.0)))
-            if l_val > 0:
-                sec_rows.append({"sector": k, "loss_usd": l_val / 1e6})
-                
-        sec_df = pd.DataFrame(sec_rows)
-        if not sec_df.empty:
-            fig_pie = px.pie(
-                sec_df,
-                names="sector",
-                values="loss_usd",
-                hole=0.4,
-                color_discrete_sequence=px.colors.sequential.RdBu,
-                title="Sector Loss Allocation ($ Millions)"
+            fig_wf = go.Figure(go.Waterfall(
+                name = "Portfolio Valuation ($M)",
+                orientation = "v",
+                measure = measures,
+                x = x_vals,
+                textposition = "outside",
+                text = text_vals,
+                y = y_vals,
+                connector = {"line":{"color":"rgb(180, 180, 180)"}},
+                decreasing = {"marker":{"color":"#ef233c"}},
+                increasing = {"marker":{"color":"#2a9d8f"}},
+                totals = {"marker":{"color":"#0077b6"}}
+            ))
+            fig_wf.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font_color="white",
+                height=380,
+                yaxis=dict(title="Portfolio Value ($ Millions)", showgrid=True, gridcolor="rgba(255,255,255,0.1)")
             )
-            fig_pie.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="white", height=380)
-            st.plotly_chart(fig_pie, use_container_width=True)
-        else:
-            st.info("No sector losses recorded.")
+            st.plotly_chart(fig_wf, use_container_width=True)
 
-    # Detailed Asset Breakdown Table
-    st.subheader("Detailed Asset Revaluation Ledger ($)")
-    df_assets = pd.DataFrame(stress_res["detailed_assets"])
-    if "loss_usd" not in df_assets.columns and "baseline_value_usd" in df_assets.columns:
-        df_assets["loss_usd"] = df_assets["baseline_value_usd"] - df_assets["stressed_value_usd"]
-    
-    display_cols = [c for c in ["asset_id", "asset_name", "asset_class", "sector", "ticker", "baseline_value_usd", "stressed_value_usd", "loss_usd", "pnl_pct"] if c in df_assets.columns]
-    st.dataframe(
-        df_assets[display_cols],
-        use_container_width=True,
-        height=300
-    )
+        with col_w2:
+            st.subheader("Loss Breakdown by Sector")
+            sec_summary = stress_res.get("by_sector", {})
+            sec_rows = []
+            for k, v in sec_summary.items():
+                l_val = v.get("loss_usd", abs(v.get("pnl_usd", 0.0)))
+                if l_val > 0:
+                    sec_rows.append({"sector": k, "loss_usd": l_val / 1e6})
+                    
+            sec_df = pd.DataFrame(sec_rows)
+            if not sec_df.empty:
+                fig_pie = px.pie(
+                    sec_df,
+                    names="sector",
+                    values="loss_usd",
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.sequential.RdBu,
+                    title="Sector Loss Allocation ($ Millions)"
+                )
+                fig_pie.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="white", height=380)
+                st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info("No sector losses recorded.")
+
+        # Detailed Asset Breakdown Table
+        st.subheader("Detailed Asset Revaluation Ledger ($)")
+        df_assets = pd.DataFrame(stress_res.get("detailed_assets", []))
+        if not df_assets.empty:
+            if "loss_usd" not in df_assets.columns and "baseline_value_usd" in df_assets.columns:
+                df_assets["loss_usd"] = df_assets["baseline_value_usd"] - df_assets["stressed_value_usd"]
+            
+            display_cols = [c for c in ["asset_id", "asset_name", "asset_class", "sector", "ticker", "baseline_value_usd", "stressed_value_usd", "loss_usd", "pnl_pct"] if c in df_assets.columns]
+            st.dataframe(
+                df_assets[display_cols],
+                use_container_width=True,
+                height=300
+            )
 
 
 # ==========================================
