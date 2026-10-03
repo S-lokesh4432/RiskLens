@@ -141,6 +141,9 @@ class StressTestEngine:
         baseline_total = float(res_df["baseline_value_usd"].sum())
         stressed_total = float(res_df["stressed_value_usd"].sum())
         
+        # Financial Safety Check: In an adverse stress test, stressed value MUST NOT exceed baseline
+        assert stressed_total <= baseline_total + 1e-6, f"Stressed value (${stressed_total:,.2f}) exceeds baseline (${baseline_total:,.2f})"
+        
         total_loss_usd = max(0.0, baseline_total - stressed_total)
         total_loss_pct = (total_loss_usd / baseline_total) if baseline_total > 0 else 0.0
         

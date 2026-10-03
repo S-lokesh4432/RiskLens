@@ -264,10 +264,15 @@ with tab2:
     if stress_res["triggered"]:
         st.markdown(f'<div class="trigger-badge">⚡ {stress_res["trigger_message"]}</div>', unsafe_allow_html=True)
         summary = stress_res["summary"]
+        baseline_m = summary["baseline_total_usd"] / 1e6
+        stressed_m = summary["stressed_total_usd"] / 1e6
+        loss_m = max(0.0, baseline_m - stressed_m)
+        loss_pct = (loss_m / baseline_m) * 100.0 if baseline_m > 0 else 0.0
+
         mc1, mc2, mc3, mc4 = st.columns(4)
-        mc1.metric("Baseline Portfolio Value", f"${summary['baseline_total_usd']/1e6:,.2f}M")
-        mc2.metric("Stressed Portfolio Value", f"${summary['stressed_total_usd']/1e6:,.2f}M")
-        mc3.metric("Total Stress Portfolio Loss", f"${summary['total_loss_usd']/1e6:,.2f}M", delta=f"-{summary['loss_pct']*100:.2f}%", delta_color="inverse")
+        mc1.metric("Baseline Portfolio Value", f"${baseline_m:,.2f}M")
+        mc2.metric("Stressed Portfolio Value", f"${stressed_m:,.2f}M")
+        mc3.metric("Total Stress Portfolio Loss", f"${loss_m:,.2f}M", delta=f"-{loss_pct:.2f}%", delta_color="inverse")
         mc4.metric("Parametric 99% VaR Estimate", f"${summary['var_99_estimate_usd']/1e6:,.2f}M")
     else:
         st.warning(f"⚠️ Stress Trigger Not Activated: {stress_res['trigger_message']}")
