@@ -228,8 +228,13 @@ with tab2:
     stress_engine = StressTestEngine()
     signals = SignalLogger.get_all_signals()
     
-    # Filter signals using trigger.is_triggerable helper
-    triggerable_signals = [s for s in signals if stress_engine.trigger.is_triggerable(StructuredRiskSignal(**s))]
+    # Filter signals using trigger evaluation helper
+    def is_sig_triggerable(sig_item):
+        if hasattr(stress_engine.trigger, "is_triggerable"):
+            return stress_engine.trigger.is_triggerable(sig_item)
+        return stress_engine.trigger.evaluate(sig_item)[0]
+
+    triggerable_signals = [s for s in signals if is_sig_triggerable(StructuredRiskSignal(**s))]
     
     if triggerable_signals:
         sig_options = [f"[{s['event_type']}] Impact: {s['impact_score']}/10 | Sent: {s['sentiment_score']:+.2f} | {s['company']} | {s['text'][:60]}..." for s in triggerable_signals]
