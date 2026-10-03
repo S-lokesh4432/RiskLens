@@ -1,16 +1,44 @@
 """
 Unified Portfolio Stress Testing Engine.
-Orchestrates portfolio revaluation under adverse macro shocks, loss calculation, and sector breakdowns.
+Orchestrates portfolio revaluation under adverse macro shocks, sector sensitivity multipliers,
+baseline 99% VaR, loss calculation, and sector breakdowns.
 """
 
 import pandas as pd
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from src.ingestion.schemas import StructuredRiskSignal
 from src.modules.stress_testing.portfolio import PortfolioManager
 from src.modules.stress_testing.scenarios import ScenarioLibrary
 from src.modules.stress_testing.trigger import StressTrigger
 from src.modules.stress_testing.valuation import ValuationModels
+
+# Annual volatility assumptions per asset class for baseline VaR (10-day, 99% confidence)
+VOLATILITY_MAP = {
+    "Equity": 0.20,
+    "Derivative": 0.25,
+    "Bond": 0.06,
+    "Loan": 0.03
+}
+
+# Sector sensitivity multiplier matrix per event type
+SECTOR_MULT_MATRIX = {
+    "Geopolitical":  {"Energy": 1.4, "Financials": 1.2, "Technology": 1.1},
+    "Regulatory":    {"Healthcare": 1.4, "Financials": 1.3, "Technology": 1.2},
+    "Credit Event":  {"Financials": 1.4, "Energy": 1.3, "Consumer Discretionary": 1.2},
+    "Macroeconomic": {"Financials": 1.3, "Consumer Discretionary": 1.3, "Technology": 1.2},
+}
+
+def compute_baseline_var_99(df: pd.DataFrame, horizon_days: int = 10) -> float:
+    """Computes undiversified baseline 99% 10-day Value-at-Risk (VaR = sum(V * Vol * 2.326 * sqrt(10/252)))"""
+    z = 2.326  # 99% confidence z-score
+    scale = (horizon_days / 252.0) ** 0.5
+    var_total = 0.0
+    for r in df.itertuples():
+        vol = VOLATILITY_MAP.get(r.asset_class, 0.05)
+        var_total += float(r.current_value_usd) * vol * z * scale
+    return round(var_total, 2)
+
 
 class StressTestEngine:
     """Runs adverse stress tests on the wholesale portfolio based on NLP Risk Engine signals."""
@@ -24,11 +52,15 @@ class StressTestEngine:
         triggered, trigger_msg = self.trigger.evaluate(signal)
         
         df = self.pm.load_portfolio()
+        baseline_var_99 = compute_baseline_var_99(df, horizon_days=10)
+        
         shocks = ScenarioLibrary.get_shocks(
             event_type=signal.event_type,
             sentiment_score=signal.sentiment_score,
             company=signal.company
         )
+        
+        sector_sensitivities = SECTOR_MULT_MATRIX.get(signal.event_type, {})
         
         # 2. Apply adverse valuation model asset by asset
         revalued_rows = []
@@ -38,13 +70,17 @@ class StressTestEngine:
             tkr = row["ticker"]
             val = float(row["current_value_usd"])
             
-            # Targeted shock multiplier if specific company matched
+            # Company specific exposure amplification (1.5x equity shock, 1.2x PD for direct company match)
             ticker_match_mult = 1.5 if (shocks["affected_ticker"] != "GENERAL" and tkr == shocks["affected_ticker"]) else 1.0
             
-            eq_shock = shocks.get("equity_shock_pct", -0.10) * ticker_match_mult
+            # Sector sensitivity multiplier
+            sec_mult = sector_sensitivities.get(sec, 1.0)
+            combined_mult = ticker_match_mult * sec_mult
+            
+            eq_shock = shocks.get("equity_shock_pct", -0.10) * combined_mult
             rate_bps = shocks.get("rate_shock_bps", 50) + shocks.get("credit_spread_shock_bps", 100)
-            pd_mult = shocks.get("pd_multiplier", 1.3) * (1.2 if ticker_match_mult > 1.0 else 1.0)
-            lgd_bump = shocks.get("lgd_bump", 0.05)
+            pd_mult = shocks.get("pd_multiplier", 1.3) * combined_mult
+            lgd_bump = shocks.get("lgd_bump", 0.05) * sec_mult
             
             if ac == "Bond":
                 new_val = ValuationModels.revalue_bond(
@@ -74,7 +110,6 @@ class StressTestEngine:
                     equity_shock_pct=eq_shock
                 )
             
-            # In an adverse stress test, new_val <= val
             pnl = new_val - val
             pnl_pct = (pnl / val) if val > 0 else 0.0
             loss_usd = max(0.0, val - new_val)
@@ -98,7 +133,6 @@ class StressTestEngine:
         baseline_total = float(res_df["baseline_value_usd"].sum())
         stressed_total = float(res_df["stressed_value_usd"].sum())
         
-        # Total Stress Loss = Baseline - Stressed (strictly positive loss amount)
         total_loss_usd = max(0.0, baseline_total - stressed_total)
         total_loss_pct = (total_loss_usd / baseline_total) if baseline_total > 0 else 0.0
         
@@ -128,7 +162,7 @@ class StressTestEngine:
                 "stressed_total_usd": stressed_total,
                 "total_loss_usd": total_loss_usd,
                 "loss_pct": total_loss_pct,
-                "var_99_estimate_usd": round(total_loss_usd * 1.28, 2)  # Parametric 99% VaR estimate
+                "var_99_estimate_usd": baseline_var_99  # Mathematically sound baseline 10-day 99% VaR
             },
             "by_asset_class": ac_summary,
             "by_sector": sec_summary,
