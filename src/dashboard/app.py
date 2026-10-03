@@ -226,28 +226,29 @@ with tab2:
     st.subheader("Module B: Strategic Portfolio Stress Testing")
     
     signals = SignalLogger.get_all_signals()
-    high_impact_signals = [s for s in signals if s.get("impact_score", 0) >= 7]
+    # Adverse high-impact signals: sentiment <= -0.3 and impact >= 7
+    adverse_signals = [s for s in signals if s.get("impact_score", 0) >= 7 and s.get("sentiment_score", 0.0) <= -0.3]
     
-    selected_sig_idx = 0
-    if high_impact_signals:
-        sig_options = [f"[{s['event_type']}] Impact: {s['impact_score']}/10 | {s['company']} | {s['text'][:60]}..." for s in high_impact_signals]
-        selected_option = st.selectbox("Select Triggering Signal for Stress Scenario Simulation:", sig_options)
+    if adverse_signals:
+        sig_options = [f"[{s['event_type']}] Impact: {s['impact_score']}/10 | Sent: {s['sentiment_score']:+.2f} | {s['company']} | {s['text'][:60]}..." for s in adverse_signals]
+        selected_option = st.selectbox("Select Triggering Adverse Risk Signal for Stress Test Simulation:", sig_options)
         selected_sig_idx = sig_options.index(selected_option)
-        active_signal = StructuredRiskSignal(**high_impact_signals[selected_sig_idx])
+        active_signal = StructuredRiskSignal(**adverse_signals[selected_sig_idx])
     else:
-        # Fallback dummy high impact signal
+        # High impact adverse default fallback signal
         active_signal = StructuredRiskSignal(
-            id="SIG-DEMO",
-            timestamp="2026-03-01",
+            id="SIG-ADVERSE-01",
+            timestamp="2026-03-02 09:00:00",
             source="news",
-            text="Geopolitical tension escalates in Strait of Hormuz; oil prices spike 15%",
-            company="XOM",
-            sentiment_score=-0.85,
-            event_type="Geopolitical",
+            text="A major midstream energy contractor defaulted on $500 million in senior debt obligations, triggering credit default contagion risks across banking syndicates.",
+            company="CVX",
+            sentiment_score=-0.91,
+            event_type="Credit Event",
             impact_score=9,
             confidence=0.92,
-            explanation="High impact geopolitical shock"
+            explanation="Severe credit default contagion shock"
         )
+        st.info("ℹ️ Displaying default Adverse Credit Event signal for stress testing demo.")
 
     # Run Stress Engine
     stress_engine = StressTestEngine()
@@ -256,58 +257,96 @@ with tab2:
     # Trigger Banner
     if stress_res["triggered"]:
         st.markdown(f'<div class="trigger-badge">⚡ {stress_res["trigger_message"]}</div>', unsafe_allow_html=True)
+    else:
+        st.warning(f"⚠️ Stress Trigger Not Activated: {stress_res['trigger_message']}")
     
     summary = stress_res["summary"]
     mc1, mc2, mc3, mc4 = st.columns(4)
-    mc1.metric("Baseline Portfolio Value", f"${summary['baseline_total_usd']:,.2f}")
-    mc2.metric("Stressed Portfolio Value", f"${summary['stressed_total_usd']:,.2f}")
-    mc3.metric("Total Stress Portfolio Loss", f"-${summary['total_loss_usd']:,.2f}", delta=f"-{summary['loss_pct']*100:.2f}%")
-    mc4.metric("Parametric 99% VaR Estimate", f"${summary['var_99_estimate_usd']:,.2f}")
+    mc1.metric("Baseline Portfolio Value", f"${summary['baseline_total_usd']/1e6:,.2f}M")
+    mc2.metric("Stressed Portfolio Value", f"${summary['stressed_total_usd']/1e6:,.2f}M")
+    mc3.metric("Total Stress Portfolio Loss", f"${summary['total_loss_usd']/1e6:,.2f}M", delta=f"-{summary['loss_pct']*100:.2f}%", delta_color="inverse")
+    mc4.metric("Parametric 99% VaR Estimate", f"${summary['var_99_estimate_usd']/1e6:,.2f}M")
 
     st.markdown("---")
 
     # Waterfall Chart
     col_w1, col_w2 = st.columns([6, 4])
     with col_w1:
-        st.subheader("Financial Loss Waterfall (Baseline → Asset Class Shocks → Stressed)")
-        ac_loss = stress_res["by_asset_class"]
+        st.subheader("Financial Loss Waterfall (Baseline → Asset Class Losses → Stressed)")
+        ac_summary = stress_res["by_asset_class"]
+        
+        loan_loss = ac_summary.get("Loan", {}).get("loss_usd", 0.0)
+        bond_loss = ac_summary.get("Bond", {}).get("loss_usd", 0.0)
+        deriv_loss = ac_summary.get("Derivative", {}).get("loss_usd", 0.0)
+        eq_loss = ac_summary.get("Equity", {}).get("loss_usd", 0.0)
         
         measures = ["absolute", "relative", "relative", "relative", "relative", "total"]
-        x_vals = ["Baseline"] + list(ac_loss.keys()) + ["Stressed"]
-        y_vals = [summary['baseline_total_usd']] + [ac_loss[ac]["pnl_usd"] for ac in ac_loss.keys()] + [summary['stressed_total_usd']]
+        x_vals = ["Baseline", "Loan Loss", "Bond Loss", "Deriv Loss", "Equity Loss", "Stressed"]
+        y_vals = [
+            summary['baseline_total_usd'] / 1e6,
+            -loan_loss / 1e6,
+            -bond_loss / 1e6,
+            -deriv_loss / 1e6,
+            -eq_loss / 1e6,
+            summary['stressed_total_usd'] / 1e6
+        ]
+
+        text_vals = [
+            f"${summary['baseline_total_usd']/1e6:.1f}M",
+            f"-${loan_loss/1e6:.1f}M",
+            f"-${bond_loss/1e6:.1f}M",
+            f"-${deriv_loss/1e6:.1f}M",
+            f"-${eq_loss/1e6:.1f}M",
+            f"${summary['stressed_total_usd']/1e6:.1f}M"
+        ]
 
         fig_wf = go.Figure(go.Waterfall(
-            name = "Portfolio Valuation",
+            name = "Portfolio Valuation ($M)",
             orientation = "v",
             measure = measures,
             x = x_vals,
             textposition = "outside",
-            text = [f"${v/1e6:.1f}M" for v in y_vals],
+            text = text_vals,
             y = y_vals,
-            connector = {"line":{"color":"rgb(63, 63, 63)"}},
+            connector = {"line":{"color":"rgb(180, 180, 180)"}},
             decreasing = {"marker":{"color":"#ef233c"}},
             increasing = {"marker":{"color":"#2a9d8f"}},
             totals = {"marker":{"color":"#0077b6"}}
         ))
-        fig_wf.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="white", height=380)
+        fig_wf.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font_color="white",
+            height=380,
+            yaxis=dict(title="Portfolio Value ($ Millions)", showgrid=True, gridcolor="rgba(255,255,255,0.1)")
+        )
         st.plotly_chart(fig_wf, use_container_width=True)
 
     with col_w2:
         st.subheader("Loss Breakdown by Sector")
-        sec_loss = stress_res["by_sector"]
+        sec_summary = stress_res["by_sector"]
         sec_df = pd.DataFrame([
-            {"sector": k, "loss_usd": abs(v["pnl_usd"])} for k, v in sec_loss.items() if v["pnl_usd"] < 0
+            {"sector": k, "loss_usd": v["loss_usd"] / 1e6} for k, v in sec_summary.items() if v["loss_usd"] > 0
         ])
         if not sec_df.empty:
-            fig_pie = px.pie(sec_df, names="sector", values="loss_usd", hole=0.4, color_discrete_sequence=px.colors.sequential.RdBu)
+            fig_pie = px.pie(
+                sec_df,
+                names="sector",
+                values="loss_usd",
+                hole=0.4,
+                color_discrete_sequence=px.colors.sequential.RdBu,
+                title="Sector Loss Allocation ($ Millions)"
+            )
             fig_pie.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="white", height=380)
             st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.info("No sector losses recorded.")
 
     # Detailed Asset Breakdown Table
-    st.subheader("Detailed Asset Revaluation Ledger")
+    st.subheader("Detailed Asset Revaluation Ledger ($)")
     df_assets = pd.DataFrame(stress_res["detailed_assets"])
     st.dataframe(
-        df_assets[["asset_id", "asset_name", "asset_class", "sector", "ticker", "baseline_value_usd", "stressed_value_usd", "pnl_usd", "pnl_pct"]],
+        df_assets[["asset_id", "asset_name", "asset_class", "sector", "ticker", "baseline_value_usd", "stressed_value_usd", "loss_usd", "pnl_pct"]],
         use_container_width=True,
         height=300
     )
