@@ -4,7 +4,7 @@
 **College Email ID:** solleti.sailokesh2023@vitstudent.ac.in  
 **College / Campus:** VIT Chennai  
 **Demo Video Link:** https://youtu.be/unlisted_demo_link  
-**Slide Deck Link:** https://docs.google.com/presentation/d/15fQUpTHUC6X22DneMKwnGZJvO9Z9Qucs/edit?usp=sharing&ouid=113379873522700807228&rtpof=true&sd=true 
+**Slide Deck Link:** https://docs.google.com/presentation/d/1-TXEDCFSCiBp-SpiUQqNdMuv9rNc8rrA/edit?usp=sharing&ouid=113379873522700807228&rtpof=true&sd=true
 
 ---
 
